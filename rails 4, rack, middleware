@@ -1,0 +1,65 @@
+Rack middleware allows for a pipeline design pattern when developing web applications, separating the different stages of request processing - and thus its potential failures and concerns. [The Rails documentation](http://guides.rubyonrails.org/rails_on_rack.html) describes it as what's in between the web server and web framework; it's a powerful tool and unfortunately often overlooked when developing Rails applications.
+
+#### Middleware
+
+I'll demonstrate a basic Rails implementation of a Rack middleware that simply redirects requests. First, let's take a look at the middleware itself:
+
+    module Rack
+      class Redirect
+        def initialize(app)
+          @app = app
+        end
+
+        def call(env)
+          redirects = { "/obsolete-page" => "/new-page" }
+          req = Rack::Request.new(env)
+
+          if redirects.include? req.env['PATH_INFO']
+            return [301, {'Location' => redirects[req.env['PATH_INFO']], 'Content-Type' => 'text/html'}, ['Moved Permanently']]
+          end
+
+          @app.call(env)
+        end
+      end
+    end
+
+Now let's break it down.
+
+    def initialize(app)
+      @app = app
+    end
+
+This initializes our Rack application with Rails' primary Rack application. This is essentially what separates Rack middleware from standalone Rack applications, the middleware is initialized with another Rack application, thus it has access to its environment and can modify it accordingly.
+
+    def call(env)
+
+All Rack applications respond to call, and must return an array with status code, headers, and body. It also takes the environment as a parameter so we can interact with it.
+
+    redirects = { "/obsolete-page" => "/new-page" }
+    req = Rack::Request.new(env)
+
+    if redirects.include? req.env['PATH_INFO']
+      return [301, {'Location' => redirects[req.env['PATH_INFO']], 'Content-Type' => 'text/html'}, ['Moved Permanently']]
+    end
+
+First we create a hash with our redirect rules and a request object based on the Rails environment. We can then simply check if the requested path is included in our rules, and if it is we return an array specifying the 301 status code, headers with the new location, and a simple body.
+
+You probably noticed that the body is itself an array, this is due to the following reason listed in the [Rack spec](http://rack.rubyforge.org/doc/SPEC.html): The Body must respond to each and must only yield String values. The Body itself should not be an instance of String, as this will break in Ruby 1.9.
+
+    @app.call(env)
+
+If our redirect rules did not containt the requested path, it will call the application we initialized at the beginning, passing it the environment it originally gave us. Since we haven't modified the environment this would essentially act as if nothing happened, which is what we want if the requested path is not to be redirected.
+
+### Rails
+
+With the middleware ready, we need to make our Rails application actually use it. There are quite a few different ways of loading classes and modules in Rails - which I will discuss in an upcoming blog post - but the best way to organize your middleware is to create an `app/middleware` folder, and create a module structure there; in our example we will create the file `app/middleware/rack/redirect.rb`
+
+Now that Rails can find our middleware, the final step is to add it to the Rails stack. The Rails documentation covers this fairly well [here](http://guides.rubyonrails.org/rails_on_rack.html#configuring-middleware-stack), there is however one aspect of the Rails auto-loading feature that you must keep in mind. If you add your middleware in application.rb its name must be quoted, this is due to `application.rb` being one of the first things to be loaded - before any of the dynamic initialization code loads the `app/middleware` files.
+
+With the aforementioned point in mind we add this to our `application.rb`:
+
+    config.middleware.use "Rack::Redirect"
+
+You can now verify that the middleware is added to the stack by runnig the following rake command:
+
+    bundle exec rake middleware

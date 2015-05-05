@@ -1,0 +1,4 @@
+Ansible, Bastion Host, ProxyCommand
+
+When designing your infrastructure it is common to limit the number of access points to the bare minimum, this is due to remove as many attack vectors as possible and it also makes it more manageable to secure and monitor the few you have. Another best practice is to automate as much of your intrastructure deployment and configuration as possible; now let's combine those two philosophies by accessing applications servers through a [bastion host](http://en.wikipedia.org/wiki/Bastion_host) in [Ansible](http://www.ansible.com/).
+
